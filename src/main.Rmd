@@ -1,0 +1,47 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{R}
+library(lubridate)
+library(sparklyr)
+library(tidyr)
+library(dplyr)
+library(stringr)
+
+source("Connect.R")
+source("decol_alma_transform.R")
+```
+
+
+```{R}
+sc <- ConnectToDB("Spark")
+
+local_tags <- read.csv("../data/decol-tags-1s.txt", header=F) %>%
+  union(read.csv("../data/decol-tags-1h.txt", header=F)) %>%
+  transmute(tag=str_replace(.$V1, "//.+?/", "")) %>%
+  mutate(colname=str_replace_all(.$tag, "[^A-Z0-9]", "")) %>%
+  arrange(tag)
+
+tags <- copy_to(sc, local_tags)
+
+pivoted <- tbl(sc, "environment.decol_alma") %>%
+  filter(batch == "202107.1s") %>%
+  inner_join(tags, by="tag") %>%
+  select(-tag) %>%
+  pivot_wider("ts", "colname", values_from = "numval") %>%
+  mutate(batch="1s") %>%
+  spark_write_table("environment.decol_alma_pivoted", partition_by = batch)
+
+
+
+
+
+
+spark_disconnect(sc)
+spark_disconnect_all()
+
+```
+
+
