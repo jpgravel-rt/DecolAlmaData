@@ -21,6 +21,6 @@ cat data/decol-tags-avg-1h.txt | \
   hdfs dfs -put - /rawdata/environment/decolmatage/average-1h-$TIMESTAMP.csv
 
 echo \### Extraction of interpolated values \### >&2
-cat data/decol-tags-avg-1h.txt | \
+cat data/decol-tags-interpolatd-1s.txt | \
   python -m pex.extract -a$DATE_START -e$DATE_END -i1s | \
   hdfs dfs -put - /rawdata/environment/decolmatage/interpolated-1s-$TIMESTAMP.csv
