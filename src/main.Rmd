@@ -4,6 +4,9 @@ output: html_notebook
 ---
 
 ```{R}
+defaultW <- getOption("warn")
+options(warn = -1)
+
 library(lubridate)
 library(sparklyr)
 library(tidyr)
@@ -11,36 +14,48 @@ library(dplyr)
 library(stringr)
 
 source("Connect.R")
-source("decol_alma_transform.R")
+source("utils.R")
 ```
 
 
+
+Extract transform and load data
 ```{R}
+# Constants
+DT_FORMAT = "%Y-%m-%dT%H:%M:%S"
+
+# Setup connection
 sc <- ConnectToDB("Spark")
+sdf_sql(sc, "SET hive.exec.dynamic.partition.mode = 'nonstrict'")
+#sdf_sql(sc, "USE environment")
 
-local_tags <- read.csv("../data/decol-tags-1s.txt", header=F) %>%
-  union(read.csv("../data/decol-tags-1h.txt", header=F)) %>%
-  transmute(tag=str_replace(.$V1, "//.+?/", "")) %>%
-  mutate(colname=str_replace_all(.$tag, "[^A-Z0-9]", "")) %>%
-  arrange(tag)
+# Extract data
+date_start_query <- paste("SELECT max(ts) + interval 1 second",
+                         "AS value",
+                         "FROM environment.alma_pulse")
+date_start <- (sdf_sql(sc, date_start_query) %>% collect())$value %>% 
+  fix_impala_timezone_bug() %>%
+  format(DT_FORMAT)
+date_end <- today(tz="UTC") %>%
+  format(DT_FORMAT)
 
-tags <- copy_to(sc, local_tags)
-
-pivoted <- tbl(sc, "environment.decol_alma") %>%
-  filter(batch == "202107.1s") %>%
-  inner_join(tags, by="tag") %>%
-  select(-tag) %>%
-  pivot_wider("ts", "colname", values_from = "numval") %>%
-  mutate(batch="1s") %>%
-  spark_write_table("environment.decol_alma_pivoted", partition_by = batch)
-
+extract_command <- paste("cd ..; etl/extract.sh", date_start, date_end)
+invisible(system(extract_command))
 
 
+# import into environment.alma_pulse
+alma_pulse <- spark_read_csv(sc,
+               name="alma_pulse_csv", header = F, overwrite = T, null_value = "\r",
+               path="hdfs://casagzclem1/rawdata/environment/alma_pulse") %>%
+  filter(is.na(V4)) %>%
+  transmute(tag=V1, ts=V2, val=V3, batch=str_sub(V2, 1, 7)) %>%
+  spark_write_table("environment.alma_pulse", mode="append")
 
-
+# Cleanup
+system("hdfs dfs -rm /rawdata/environment/alma_pulse/*")
+system('ssh casagzclem1 "impala-shell -q \'REFRESH environment.alma_pulse;\'"')
 
 spark_disconnect(sc)
-spark_disconnect_all()
 
 ```
 

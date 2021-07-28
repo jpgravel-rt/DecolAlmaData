@@ -83,6 +83,7 @@ ConnectToSpark = function(){
   config$`sparklyr.shell.executor-cores`      = "1"      #Default 1 in Yarn, all the available cores on the worker in standalone. The number of cores to use on each executor.
   config$`sparklyr.shell.num-executors`       = "1"      #Default 1 in Yarn, all the available cores on the worker in standalone. The number of cores to use on each executor.
   config$`spark.kryoserializer.buffer.max.mb` = "512"
+  #config$`hive.exec.dynamic.partition.mode`   = "nonstrict"
   
   #Connect
   sc = spark_connect(master = "yarn", app_name = paste0("sparklyr-", Sys.getenv("USER")), config = config)
