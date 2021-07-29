@@ -14,49 +14,70 @@ library(dplyr)
 library(stringr)
 
 source("Connect.R")
-source("utils.R")
+source("helper.R")
 ```
 
 
 
 Extract transform and load data
 ```{R}
-# Constants
-DT_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 # Setup connection
 sc <- ConnectToDB("Spark")
 sdf_sql(sc, "SET hive.exec.dynamic.partition.mode = 'nonstrict'")
-#sdf_sql(sc, "USE environment")
 
-# Extract data
-date_start_query <- paste("SELECT max(ts) + interval 1 second",
-                         "AS value",
-                         "FROM environment.alma_pulse")
-date_start <- (sdf_sql(sc, date_start_query) %>% collect())$value %>% 
-  fix_impala_timezone_bug() %>%
-  format(DT_FORMAT)
-date_end <- today(tz="UTC") %>%
-  format(DT_FORMAT)
+mutex <- attachMutex("alma_pulse", 30)
 
-extract_command <- paste("cd ..; etl/extract.sh", date_start, date_end)
-invisible(system(extract_command))
+tryCatch({
+  # Constants
+  DT_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
+  # Extract data
+  date_start_query <- paste("SELECT max(ts) + interval 1 second AS value",
+                            "FROM environment.alma_pulse")
+  date_start <- (sdf_sql(sc, date_start_query) %>% collect())$value %>%
+    format(DT_FORMAT)
+  date_end <- today(tz="UTC") %>%
+    format(DT_FORMAT)
+  
+  extract_command <- paste("cd ..; etl/extract.sh", date_start, date_end)
+  system(extract_command)
+  
+  
+  # import into environment.alma_pulse
+  alma_pulse <- spark_read_csv(sc,
+                 name="alma_pulse_csv", header = F, overwrite = T, null_value = "\r",
+                 path="hdfs://casagzclem1/rawdata/environment/alma_pulse") %>%
+    filter(is.na(V4)) %>%
+    transmute(tag=V1, ts=V2, val=V3, batch=str_sub(V2, 1, 7)) %>%
+    spark_write_table("environment.alma_pulse", mode="append")
+  
+  
+  # Defragment the table every Thursday.
+  if (wday(now()) == 5) {
+    print("Defragmentation of 'environment.alma_pulse'")
+    sdf_sql(sc, "SELECT tag, ts, val, batch FROM environment.alma_pulse") %>%
+      spark_write_table("environment.alma_pulse2", partition_by = "batch")
+    invisible({
+      sdf_sql(sc,"ALTER TABLE environment.alma_pulse RENAME TO environment.alma_pulse_tmp")
+      sdf_sql(sc,"ALTER TABLE environment.alma_pulse2 RENAME TO environment.alma_pulse")
+      sdf_sql(sc,"DROP TABLE environment.alma_pulse_tmp")
+    })
+  }
+  
+  # Cleanup
+  system("hdfs dfs -rm /rawdata/environment/alma_pulse/*")
+  system(paste('ssh casagzclem1 "impala-shell -q \'',
+                 'INVALIDATE METADATA environment.alma_pulse;',
+                 'REFRESH environment.alma_pulse;',
+               '\'"'))
+  
+},
+finally = {
+  releaseMutex(mutex)
+  spark_disconnect(sc)
+})
 
-# import into environment.alma_pulse
-alma_pulse <- spark_read_csv(sc,
-               name="alma_pulse_csv", header = F, overwrite = T, null_value = "\r",
-               path="hdfs://casagzclem1/rawdata/environment/alma_pulse") %>%
-  filter(is.na(V4)) %>%
-  transmute(tag=V1, ts=V2, val=V3, batch=str_sub(V2, 1, 7)) %>%
-  spark_write_table("environment.alma_pulse", mode="append")
-
-# Cleanup
-system("hdfs dfs -rm /rawdata/environment/alma_pulse/*")
-system('ssh casagzclem1 "impala-shell -q \'REFRESH environment.alma_pulse;\'"')
-
-spark_disconnect(sc)
 
 ```
-
 

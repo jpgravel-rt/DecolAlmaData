@@ -5,19 +5,14 @@ library(dplyr)
 library(lubridate)
 
 
-fix_impala_timezone_bug <- function(datetime) {
-  datetime_local <- datetime
-  tz(datetime_local) <- "America/Montreal"
-  if (dst(datetime_local)) {
-    return(datetime - duration(4, "hours"))
-  } else {
-    return(datetime - duration(5, "hours"))
-  }  
-}
-
-
-
+#TODO: update parameters
 interpolate <- function(sdf, sc, discretization = 1) {
+  
+  #TODO: Convert timestamp (ts) to a unix time variable called 'time'.
+  #TODO: Alingn the discretization with the whole time in seconds, ex: if disc is 5: 0,5,10,15... not 2,7,12,17
+  #TODO: Make sure the discretized time is contained within non NA sampled data
+  
+  
   # Get the time period of the samplings
   period = sdf %>% 
     summarise(start=min(time), end=max(time)) %>% 
@@ -26,6 +21,8 @@ interpolate <- function(sdf, sc, discretization = 1) {
   # Create a full set of discrete time values
   series <- sdf_seq(sc, from=period$start, to=period$end, by=discretization) %>% 
     select(time=id)
+  
+  
   
   # The target size is not the series size since the discretization and the actual
   # samples may end up with interleaved entries. Thus, the number of entries to 

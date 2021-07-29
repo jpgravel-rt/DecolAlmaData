@@ -6,7 +6,7 @@ DATE_END=$2
 TIMESTAMP=$(date +%s)
 
 # Activate the pex environment
-source /home/jpgravel/.pexenv/bin/activate
+source /home/shared/pexenv/bin/activate
 python --version >&2
 python -m pex >&2
 echo >&2
