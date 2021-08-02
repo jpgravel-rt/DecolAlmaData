@@ -5,8 +5,11 @@ DATE_END=$2
 
 TIMESTAMP=$(date +%s)
 
+export PEX_KEY=rstudio
+
 # Activate the pex environment
 source /home/shared/pexenv/bin/activate
+echo Alma Pulse Data Extraction -- Executing as \'$USER\' from \'$HOSTNAME\'>&2
 python --version >&2
 python -m pex >&2
 echo >&2
@@ -19,7 +22,7 @@ cat data/decol-tags-recorded-2m.txt | \
   hdfs dfs -put - /rawdata/environment/alma_pulse/recorded-2m-$TIMESTAMP.csv
   
 echo >&2
-echo \### Extraction of avarged values \### >&2
+echo \### Extraction of average values \### >&2
 cat data/decol-tags-avg-1h.txt | \
   python -m pex.extract -tSummary -a$DATE_START -e$DATE_END -i1h | \
   hdfs dfs -put - /rawdata/environment/alma_pulse/average-1h-$TIMESTAMP.csv

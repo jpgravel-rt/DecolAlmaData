@@ -226,3 +226,30 @@ pi_to_hdfs <- function(date_debut, date_fin, tags, batchSize, interval, location
   }
   rm(credentials)
 }
+
+
+#---------------------------------
+# Spark
+#---------------------------------
+# I do not understand any of this.
+#---------------------------------
+ConnectToSpark = function(){
+  #Set home
+  Sys.setenv(SPARK_HOME = "/usr/lib/spark/")
+  
+  #Initialize configuration
+  config = spark_config()
+  
+  #Config
+  config$`spark.yarn.am.memory`               = "1g"     #Default 512m. Amount of memory to use for the YARN Application Master in client mode. spark.yarn.am.memory + some overhead should be less than yarn.nodemanager.resource.memory-mb. In cluster mode, use spark.driver.memory instead.
+  config$`spark.yarn.am.memoryOverhead`       = "1g"     #Default "AM" memory * 0.10, with minimum of 384. Same as spark.driver.memoryOverhead, but for the YARN Application Master in client mode.
+  config$`spark.yarn.am.cores`                = 1        #Default 1. Number of cores to use for the YARN Application Master in client mode. In cluster mode, use spark.driver.cores instead.
+  config$`sparklyr.shell.executor-memory`     = "4g"     #Default 1g. Amount of memory to use per executor process.
+  config$`sparklyr.shell.executor-cores`      = "1"      #Default 1 in Yarn, all the available cores on the worker in standalone. The number of cores to use on each executor.
+  config$`sparklyr.shell.num-executors`       = "1"      #Default 1 in Yarn, all the available cores on the worker in standalone. The number of cores to use on each executor.
+  config$`spark.kryoserializer.buffer.max.mb` = "512"
+  #config$`hive.exec.dynamic.partition.mode`   = "nonstrict"
+  
+  #Connect
+  sc = spark_connect(master = "yarn", app_name = paste0("sparklyr-", Sys.getenv("USER")), config = config)
+}
