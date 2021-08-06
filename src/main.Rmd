@@ -44,7 +44,6 @@ tryCatch({
   date_end <- today(tz="UTC") %>%
     format(DT_FORMAT)
   
-  print(Sys.getenv("HOME"))
   extract_command <- paste("chmod 755 extract.sh; ./extract.sh", date_start, date_end)
   system(extract_command)
   
@@ -53,6 +52,7 @@ tryCatch({
   alma_pulse <- spark_read_csv(sc,
                  name="alma_pulse_csv", header = F, overwrite = T, null_value = "\r",
                  path="hdfs://casagzclem1/rawdata/environment/alma_pulse") %>%
+    distinct() %>%    # to insure that previous failed execution don't cause repeating rows
     filter(is.na(V4)) %>%
     transmute(tag=V1, ts=V2, val=V3, batch=str_sub(V2, 1, 7)) %>%
     spark_write_table("environment.alma_pulse", mode="append")
@@ -60,7 +60,7 @@ tryCatch({
   
   # Defragment the table every Thursday.
   if (wday(now()) == 5) {
-    print("Defragmentation of 'environment.alma_pulse'")
+    print("Defragmentation and cleanup of 'environment.alma_pulse'")
     sdf_sql(sc, "SELECT tag, ts, val, batch FROM environment.alma_pulse") %>%
       spark_write_table("environment.alma_pulse2", partition_by = "batch")
     invisible({
@@ -71,7 +71,6 @@ tryCatch({
   }
   
   # Cleanup
-  system("hdfs dfs -rm /rawdata/environment/alma_pulse/*")
   system(paste('ssh casagzclem1 "impala-shell -q \'',
                  'INVALIDATE METADATA environment.alma_pulse;',
                  'REFRESH environment.alma_pulse;',
@@ -81,8 +80,8 @@ tryCatch({
 finally = {
   releaseMutex(mutex)
   spark_disconnect(sc)
+  system("hdfs dfs -rm /rawdata/environment/alma_pulse/*")
 })
 
 
 ```
-
