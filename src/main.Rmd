@@ -1,5 +1,5 @@
 ---
-title: "R Notebook"
+title: "Alma Pulse Extraction Notebook"
 output: html_notebook
 resource_files:
 - extract.sh
@@ -58,14 +58,16 @@ tryCatch({
     spark_write_table("environment.alma_pulse", mode="append")
   
   
-  # Defragment the table every Thursday.
-  if (wday(now()) == 5) {
+  # Defragment the table if we are the last day of the month.
+  today = date(now())
+  last_day_of_month = date(ceiling_date(now(), "month") - period(1, "day"))
+  if (today == last_day_of_month) {
     print("Defragmentation and cleanup of 'environment.alma_pulse'")
     sdf_sql(sc, "SELECT tag, ts, val, batch FROM environment.alma_pulse") %>%
       spark_write_table("environment.alma_pulse2", partition_by = "batch")
     invisible({
       sdf_sql(sc,"ALTER TABLE environment.alma_pulse RENAME TO environment.alma_pulse_tmp")
-      sdf_sql(sc,"ALTER TABLE environment.alma_pulse2 RENAME TO environment.alma_pulse")
+      sdf_sql(sc,"ALTER TABLE environment.alma_pulse_tmp RENAME TO environment.alma_pulse")
       sdf_sql(sc,"DROP TABLE environment.alma_pulse_tmp")
     })
   }

@@ -231,8 +231,6 @@ pi_to_hdfs <- function(date_debut, date_fin, tags, batchSize, interval, location
 #---------------------------------
 # Spark
 #---------------------------------
-# I do not understand any of this.
-#---------------------------------
 ConnectToSpark = function(){
   #Set home
   Sys.setenv(SPARK_HOME = "/usr/lib/spark/")
